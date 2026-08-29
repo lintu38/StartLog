@@ -211,13 +211,6 @@
     50%{ transform: rotate(16deg); }
   }
 
-  .walker.bark svg{ animation: barkPop 0.36s cubic-bezier(0.2, 1.5, 0.4, 1); }
-  @keyframes barkPop{
-    0%{ transform: scale(1) translateY(0); }
-    35%{ transform: scale(1.22) translateY(-3px); }
-    100%{ transform: scale(1) translateY(0); }
-  }
-
   @media (prefers-reduced-motion: reduce){
     .walker .bob, .walker .leg-a, .walker .leg-b, .walker .tail{ animation: none; }
   }
@@ -823,7 +816,6 @@
   // ---- Gentle chime, one minute before the goal ----
   let audioCtx = null;
   let warned = false;
-  let goalHopped = false;
 
   function ensureAudio(){
     try{
@@ -851,18 +843,6 @@
     osc.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
     osc.start(startAt);
     osc.stop(startAt + dur + 0.05);
-  }
-
-  // Little hop from the dog at key moments.
-  let hopTimer = null;
-  function hopDog(){
-    const el = document.getElementById('walker');
-    if(!el) return;
-    el.classList.remove('bark');
-    void el.offsetWidth;           // restart the animation
-    el.classList.add('bark');
-    if(hopTimer) clearTimeout(hopTimer);
-    hopTimer = setTimeout(() => el.classList.remove('bark'), 400);
   }
 
   function playChime(){
@@ -1011,8 +991,8 @@
 
   // Ring color ramp: muted sage → yellow → orange → red as the threshold approaches.
   const RAMP = [
-    { p: 0.00, h: 108, s: 24, l: 60 },  // pale, muted green
-    { p: 0.30, h: 68,  s: 52, l: 52 },  // yellow-green
+    { p: 0.00, h: 84,  s: 42, l: 47 },  // deeper yellow-green
+    { p: 0.30, h: 64,  s: 58, l: 48 },  // yellow-green
     { p: 0.52, h: 46,  s: 82, l: 50 },  // yellow
     { p: 0.76, h: 27,  s: 88, l: 51 },  // orange
     { p: 1.00, h: 12,  s: 75, l: 44 }   // red
@@ -1198,6 +1178,8 @@
   function dismissFinished(){
     if(finishTimer){ clearTimeout(finishTimer); finishTimer = null; }
     justFinished = false;
+    showResult = false;      // clear the last run so the dial and dog go back to the start
+    lastResult = null;
     render();
   }
 
@@ -1207,7 +1189,6 @@
       if(finishTimer){ clearTimeout(finishTimer); finishTimer = null; }
       justFinished = false;
       warned = false;
-      goalHopped = false;
       stopReminder();
       ensureAudio();   // unlock audio while we still have the click gesture
       data.runningStart = Date.now();
@@ -1261,20 +1242,16 @@
     const elapsedNow = (Date.now() - data.runningStart) / 1000;
     const remaining = data.thresholdSec - elapsedNow;
 
-    // One-minute warning (only meaningful when the goal is longer than a minute)
-    if(!warned && data.thresholdSec > 60 && remaining <= 60 && remaining > 0){
+    // Early warning: a minute out, or halfway through a shorter goal.
+    const warnAt = Math.min(60, data.thresholdSec / 2);
+    if(!warned && remaining <= warnAt && remaining > 0){
       warned = true;
       playChime();
-      hopDog();                 // first hop: a minute to go
       startReminder('warning');
     }
     // Past the goal line, nudge a little more often.
-    if(remaining <= 0){
-      if(!goalHopped){
-        goalHopped = true;
-        hopDog();               // second hop: the goal line has passed
-      }
-      if(data.soundOn !== false) startReminder('overtime');
+    if(remaining <= 0 && data.soundOn !== false){
+      startReminder('overtime');
     }
     const rawProgress = elapsedNow / data.thresholdSec;
     const progress = Math.min(rawProgress, 1);
